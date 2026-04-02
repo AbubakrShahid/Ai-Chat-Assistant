@@ -5,6 +5,14 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ChatRequest {
   prompt: string;
   history: ChatMessage[];
@@ -16,4 +24,9 @@ export interface ChatResponse {
 
 export interface ChatErrorResponse {
   error: string;
+}
+
+export interface StreamChunk {
+  content?: string;
+  error?: string;
 }

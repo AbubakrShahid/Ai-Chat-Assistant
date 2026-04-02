@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { ChatRequest, ChatResponse, ChatErrorResponse } from "@/types/chat";
+import { ChatRequest, ChatErrorResponse } from "@/types/chat";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -8,7 +8,7 @@ const openai = new OpenAI({
 
 export async function POST(
   request: Request
-): Promise<NextResponse<ChatResponse | ChatErrorResponse>> {
+): Promise<Response | NextResponse<ChatErrorResponse>> {
   try {
     const body: ChatRequest = await request.json();
     const { prompt, history } = body;
@@ -20,9 +20,15 @@ export async function POST(
       );
     }
 
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "your_openai_api_key_here") {
+    if (
+      !process.env.OPENAI_API_KEY ||
+      process.env.OPENAI_API_KEY === "your_openai_api_key_here"
+    ) {
       return NextResponse.json(
-        { error: "OpenAI API key is not configured. Please set OPENAI_API_KEY in your .env.local file." },
+        {
+          error:
+            "OpenAI API key is not configured. Please set OPENAI_API_KEY in your .env.local file.",
+        },
         { status: 500 }
       );
     }
@@ -30,7 +36,8 @@ export async function POST(
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       {
         role: "system",
-        content: "You are a helpful AI assistant. Provide clear, concise, and accurate responses.",
+        content:
+          "You are a helpful AI assistant. Provide clear, concise, and accurate responses. Use markdown formatting when appropriate — code blocks, lists, bold, etc.",
       },
       ...history.map((msg) => ({
         role: msg.role as "user" | "assistant",
@@ -42,23 +49,51 @@ export async function POST(
       },
     ];
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages,
-      max_tokens: 1024,
+      max_tokens: 2048,
       temperature: 0.7,
+      stream: true,
     });
 
-    const responseMessage = completion.choices[0]?.message?.content;
+    const encoder = new TextEncoder();
 
-    if (!responseMessage) {
-      return NextResponse.json(
-        { error: "No response received from OpenAI." },
-        { status: 502 }
-      );
-    }
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content;
+            if (content) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ content })}\n\n`)
+              );
+            }
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (streamError) {
+          const errorMessage =
+            streamError instanceof Error
+              ? streamError.message
+              : "Stream interrupted";
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ error: errorMessage })}\n\n`
+            )
+          );
+          controller.close();
+        }
+      },
+    });
 
-    return NextResponse.json({ message: responseMessage });
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     if (error instanceof OpenAI.APIError) {
       const statusCode = error.status ?? 500;
