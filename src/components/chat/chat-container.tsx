@@ -58,10 +58,10 @@ export function ChatContainer() {
   }, [conversations.length, dispatch]);
 
   useEffect(() => {
-    if (isMobile && sidebarOpen) {
+    if (isMobile) {
       dispatch(setSidebarOpen(false));
     }
-  }, [isMobile, sidebarOpen, dispatch]);
+  }, [isMobile, dispatch]);
 
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
