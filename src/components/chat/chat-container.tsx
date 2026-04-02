@@ -7,6 +7,7 @@ import {
   clearConversation,
   dismissError,
   toggleSidebar,
+  setSidebarOpen,
 } from "@/store/chat-slice";
 import { useStreamChat } from "@/hooks/use-stream-chat";
 import { ChatMessage } from "@/components/chat/chat-message";
@@ -16,6 +17,7 @@ import { EmptyState } from "@/components/chat/empty-state";
 import { Sidebar } from "@/components/chat/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Bot,
   Trash2,
@@ -26,16 +28,26 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 export function ChatContainer() {
   const dispatch = useAppDispatch();
-  const conversations = useAppSelector((state) => state.chat?.conversations ?? []);
-  const activeConversationId = useAppSelector((state) => state.chat?.activeConversationId ?? null);
+  const conversations = useAppSelector(
+    (state) => state.chat?.conversations ?? []
+  );
+  const activeConversationId = useAppSelector(
+    (state) => state.chat?.activeConversationId ?? null
+  );
   const isLoading = useAppSelector((state) => state.chat?.isLoading ?? false);
-  const isStreaming = useAppSelector((state) => state.chat?.isStreaming ?? false);
+  const isStreaming = useAppSelector(
+    (state) => state.chat?.isStreaming ?? false
+  );
   const error = useAppSelector((state) => state.chat?.error ?? null);
-  const sidebarOpen = useAppSelector((state) => state.chat?.sidebarOpen ?? true);
+  const sidebarOpen = useAppSelector(
+    (state) => state.chat?.sidebarOpen ?? true
+  );
 
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const { sendMessage, stopStreaming } = useStreamChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +57,13 @@ export function ChatContainer() {
       dispatch(createConversation());
     }
   }, [conversations.length, dispatch]);
+
+  // Auto-close sidebar on mobile
+  useEffect(() => {
+    if (isMobile && sidebarOpen) {
+      dispatch(setSidebarOpen(false));
+    }
+  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
@@ -97,21 +116,39 @@ export function ChatContainer() {
     dispatch(toggleSidebar());
   }, [dispatch]);
 
+  const handleMobileSheetChange = useCallback(
+    (open: boolean) => {
+      dispatch(setSidebarOpen(open));
+    },
+    [dispatch]
+  );
+
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "shrink-0 border-r border-border/50 overflow-hidden",
-          "transition-[width] duration-300 ease-in-out",
-          sidebarOpen ? "w-72" : "w-0"
-        )}
-        style={{ willChange: "width" }}
-      >
-        <div className="h-full w-72">
-          <Sidebar />
-        </div>
-      </aside>
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <aside
+          className={cn(
+            "hidden md:block shrink-0 border-r border-border/50 overflow-hidden",
+            "transition-[width] duration-300 ease-in-out",
+            sidebarOpen ? "w-72" : "w-0"
+          )}
+          style={{ willChange: "width" }}
+        >
+          <div className="h-full w-72">
+            <Sidebar />
+          </div>
+        </aside>
+      )}
+
+      {/* Mobile Sidebar Sheet */}
+      {isMobile && (
+        <Sheet open={sidebarOpen} onOpenChange={handleMobileSheetChange}>
+          <SheetContent side="left" showCloseButton={false} className="w-72 p-0">
+            <Sidebar />
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Main Chat Area */}
       <div className="flex flex-1 flex-col min-w-0 bg-gradient-to-b from-background via-background to-muted/10">
@@ -126,7 +163,7 @@ export function ChatContainer() {
                 className="rounded-lg"
                 aria-label="Toggle sidebar"
               >
-                {sidebarOpen ? (
+                {sidebarOpen && !isMobile ? (
                   <PanelLeftClose className="h-4 w-4" />
                 ) : (
                   <PanelLeft className="h-4 w-4" />
@@ -134,14 +171,14 @@ export function ChatContainer() {
               </Button>
 
               <div className="flex items-center gap-3">
-                <div className="relative">
+                <div className="relative hidden sm:block">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm">
                     <Bot className="h-5 w-5" />
                   </div>
                   <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-400" />
                 </div>
                 <div>
-                  <h1 className="text-base font-semibold tracking-tight text-foreground">
+                  <h1 className="text-base font-semibold tracking-tight text-foreground line-clamp-1">
                     {activeConversation?.title ?? "AI Chat"}
                   </h1>
                   <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -197,11 +234,8 @@ export function ChatContainer() {
           </div>
         )}
 
-        {/* Messages — native scroll div instead of ScrollArea */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto"
-        >
+        {/* Messages */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl py-4">
             {messages.length === 0 && !isLoading ? (
               <EmptyState />
