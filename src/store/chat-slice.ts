@@ -33,8 +33,16 @@ const initialState: ChatState = {
   sidebarOpen: true,
 };
 
+function ensureConversations(state: ChatState): Conversation[] {
+  if (!Array.isArray(state.conversations)) {
+    state.conversations = [];
+  }
+  return state.conversations;
+}
+
 function getActiveConversation(state: ChatState): Conversation | undefined {
-  return state.conversations.find((c) => c.id === state.activeConversationId);
+  const conversations = ensureConversations(state);
+  return conversations.find((c) => c.id === state.activeConversationId);
 }
 
 const chatSlice = createSlice({
@@ -42,6 +50,7 @@ const chatSlice = createSlice({
   initialState,
   reducers: {
     createConversation(state) {
+      ensureConversations(state);
       const conversation = createNewConversation();
       state.conversations.unshift(conversation);
       state.activeConversationId = conversation.id;
@@ -58,6 +67,7 @@ const chatSlice = createSlice({
     },
 
     deleteConversation(state, action: PayloadAction<string>) {
+      ensureConversations(state);
       state.conversations = state.conversations.filter(
         (c) => c.id !== action.payload
       );
@@ -76,7 +86,7 @@ const chatSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; title: string }>
     ) {
-      const conversation = state.conversations.find(
+      const conversation = ensureConversations(state).find(
         (c) => c.id === action.payload.id
       );
       if (conversation) {
@@ -117,7 +127,8 @@ const chatSlice = createSlice({
       const conversation = getActiveConversation(state);
       if (!conversation) return;
 
-      const lastMessage = conversation.messages[conversation.messages.length - 1];
+      const lastMessage =
+        conversation.messages[conversation.messages.length - 1];
       if (lastMessage && lastMessage.role === "assistant") {
         lastMessage.content += action.payload;
       }
@@ -136,12 +147,15 @@ const chatSlice = createSlice({
       state.isStreaming = false;
       state.error = action.payload;
 
-      // Remove the empty assistant message if streaming failed
       const conversation = getActiveConversation(state);
       if (conversation) {
         const lastMessage =
           conversation.messages[conversation.messages.length - 1];
-        if (lastMessage && lastMessage.role === "assistant" && lastMessage.content === "") {
+        if (
+          lastMessage &&
+          lastMessage.role === "assistant" &&
+          lastMessage.content === ""
+        ) {
           conversation.messages.pop();
         }
       }
